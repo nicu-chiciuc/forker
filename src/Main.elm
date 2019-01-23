@@ -1,4 +1,4 @@
-module Main exposing (Msg(..), getGithubForks, init, main, subscriptions, update, view, viewGif)
+port module Main exposing (Msg(..), getGithubForks, init, main, subscriptions, update, view, viewGif)
 
 import Browser
 import Html exposing (..)
@@ -6,6 +6,7 @@ import Html.Attributes exposing (..)
 import Html.Events exposing (..)
 import Http
 import Json.Decode as D
+import Json.Encode as E
 import String
 import Task
 import Time
@@ -71,6 +72,29 @@ init currentTime =
 
 
 
+-- SUBSCRIPTIONS
+
+
+subscriptions : Model -> Sub Msg
+subscriptions model =
+    let
+        timer =
+            Time.every 1000 Tick
+    in
+    Sub.batch [ timer, setRepoName ChangeRepo ]
+
+
+
+-- PORTS
+
+
+port testPort : E.Value -> Cmd msg
+
+
+port setRepoName : (String -> msg) -> Sub msg
+
+
+
 -- UPDATE
 
 
@@ -88,7 +112,7 @@ update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
         ChangeRepo url ->
-            ( { model | mainRepo = url }, Cmd.none )
+            ( { model | mainRepo = url }, testPort (E.string url) )
 
         FindRepo ->
             ( { model | forks = Loading }, getGithubForks model.mainRepo )
@@ -117,15 +141,6 @@ update msg model =
 
         Tick newTime ->
             ( { model | time = newTime }, Cmd.none )
-
-
-
--- SUBSCRIPTIONS
-
-
-subscriptions : Model -> Sub Msg
-subscriptions model =
-    Time.every 1000 Tick
 
 
 

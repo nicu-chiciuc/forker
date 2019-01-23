@@ -25,8 +25,22 @@
       flags: Date.now()
     });
 
-    app.ports.setStorage.subscribe(function(state) {
-      localStorage.setItem("storage-save", JSON.stringify(state));
-    });
+    if (app.ports) {
+      const { testPort, setStorage, setRepoName } = app.ports;
+
+      testPort &&
+        testPort.subscribe(info => {
+          console.log("RECEIVED FROM PORT ", info);
+        });
+
+      setStorage &&
+        setStorage.subscribe(function(state) {
+          localStorage.setItem("storage-save", JSON.stringify(state));
+        });
+
+      window.setRepo = newName => {
+        setRepoName && setRepoName.send(newName);
+      };
+    }
   </script>
 </html>
