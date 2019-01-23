@@ -49,14 +49,14 @@ type alias Model =
     }
 
 
-init : () -> ( Model, Cmd Msg )
-init _ =
+init : Int -> ( Model, Cmd Msg )
+init currentTime =
     let
         ( model, msgExampleJson ) =
             update (InitData (D.decodeString forkDecoder exampleJSON))
                 { forks = Loading
                 , mainRepo = "elm/core"
-                , time = Time.millisToPosix 0
+                , time = Time.millisToPosix currentTime
                 , zone = Time.utc
                 , zoneName = Nothing
                 }
@@ -81,6 +81,7 @@ type Msg
     | GotGif (Result Http.Error (List ForkEntry))
     | AdjustTimeZone Time.Zone
     | FindZoneName Time.ZoneName
+    | Tick Time.Posix
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -114,6 +115,9 @@ update msg model =
         FindZoneName zoneName ->
             ( { model | zoneName = Just zoneName }, Cmd.none )
 
+        Tick newTime ->
+            ( { model | time = newTime }, Cmd.none )
+
 
 
 -- SUBSCRIPTIONS
@@ -121,7 +125,7 @@ update msg model =
 
 subscriptions : Model -> Sub Msg
 subscriptions model =
-    Sub.none
+    Time.every 1000 Tick
 
 
 
@@ -133,8 +137,29 @@ view model =
     div []
         [ h2 [] [ text "Github forks" ]
         , h3 [] [ text (viewZoneName model.zoneName) ]
+        , h3 [] [ text (viewTime model) ]
         , viewGif model
         ]
+
+
+viewTime : Model -> String
+viewTime model =
+    let
+        ( hour, min, sec ) =
+            localTime model.zone model.time
+
+        st =
+            String.fromInt
+    in
+    st hour ++ ":" ++ st min ++ ":" ++ st sec
+
+
+localTime : Time.Zone -> Time.Posix -> ( Int, Int, Int )
+localTime zone posix =
+    ( Time.toHour zone posix
+    , Time.toMinute zone posix
+    , Time.toSecond zone posix
+    )
 
 
 viewZoneName : Maybe Time.ZoneName -> String
