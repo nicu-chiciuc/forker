@@ -6,6 +6,9 @@ import Html.Attributes exposing (..)
 import Html.Events exposing (..)
 import Http
 import Json.Decode as D
+import String
+import Task
+import Time
 
 
 
@@ -40,15 +43,31 @@ type ListModel
 type alias Model =
     { mainRepo : String
     , forks : ListModel
+    , time : Time.Posix
+    , zone : Time.Zone
+    , zoneName : Maybe Time.ZoneName
     }
 
 
 init : () -> ( Model, Cmd Msg )
 init _ =
-    update (InitData (D.decodeString forkDecoder exampleJSON))
-        { forks = Loading
-        , mainRepo = "elm/core"
-        }
+    let
+        ( model, msgExampleJson ) =
+            update (InitData (D.decodeString forkDecoder exampleJSON))
+                { forks = Loading
+                , mainRepo = "elm/core"
+                , time = Time.millisToPosix 0
+                , zone = Time.utc
+                , zoneName = Nothing
+                }
+
+        adjustTime =
+            Task.perform AdjustTimeZone Time.here
+
+        getZoneName =
+            Task.perform FindZoneName Time.getZoneName
+    in
+    ( model, Cmd.batch [ msgExampleJson, adjustTime, getZoneName ] )
 
 
 
@@ -60,6 +79,8 @@ type Msg
     | ChangeRepo String
     | InitData (Result D.Error (List ForkEntry))
     | GotGif (Result Http.Error (List ForkEntry))
+    | AdjustTimeZone Time.Zone
+    | FindZoneName Time.ZoneName
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -87,6 +108,12 @@ update msg model =
                 Err _ ->
                     ( { model | forks = Failure }, Cmd.none )
 
+        AdjustTimeZone newZone ->
+            ( { model | zone = newZone }, Cmd.none )
+
+        FindZoneName zoneName ->
+            ( { model | zoneName = Just zoneName }, Cmd.none )
+
 
 
 -- SUBSCRIPTIONS
@@ -105,8 +132,24 @@ view : Model -> Html Msg
 view model =
     div []
         [ h2 [] [ text "Github forks" ]
+        , h3 [] [ text (viewZoneName model.zoneName) ]
         , viewGif model
         ]
+
+
+viewZoneName : Maybe Time.ZoneName -> String
+viewZoneName maybeZoneName =
+    case maybeZoneName of
+        Just zoneName ->
+            case zoneName of
+                Time.Name str ->
+                    str
+
+                Time.Offset int ->
+                    "offset " ++ String.fromInt int
+
+        Nothing ->
+            "zone name not found"
 
 
 viewGif : Model -> Html Msg
