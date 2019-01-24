@@ -62,6 +62,8 @@ type alias Model =
     { mainRepo : String
     , forks : ListModel
     , timeStuff : TimeStuff
+    , navKey : Nav.Key
+    , url : Url.Url
     }
 
 
@@ -77,6 +79,8 @@ init currentTime currentUrl navKey =
                     , zone = Time.utc
                     , zoneName = Nothing
                     }
+                , url = currentUrl
+                , navKey = navKey
                 }
 
         adjustTime =
@@ -169,10 +173,15 @@ update msg model =
             ( { model | timeStuff = { timeStuff | time = newTime } }, Cmd.none )
 
         UrlChanged url ->
-            ( model, Cmd.none )
+            ( { model | url = url }, Cmd.none )
 
         LinkClicked urlRequest ->
-            ( model, Cmd.none )
+            case urlRequest of
+                Browser.Internal url ->
+                    ( model, Nav.pushUrl model.navKey (Url.toString url) )
+
+                Browser.External href ->
+                    ( model, Nav.load href )
 
 
 
@@ -181,12 +190,17 @@ update msg model =
 
 view : Model -> Document Msg
 view model =
-    { title = model.mainRepo
+    { title = Url.toString model.url
     , body =
         [ div []
             [ h2 [] [ text "Github forks" ]
             , h3 [] [ text (viewZoneName model.timeStuff.zoneName) ]
             , h3 [] [ text (viewTime model) ]
+            , ul []
+                [ viewLink "/about"
+                , viewLink "/home"
+                , viewLink "http://google.com/"
+                ]
             , viewGif model
             ]
         ]
@@ -203,6 +217,11 @@ viewTime model =
             String.fromInt
     in
     st hour ++ ":" ++ st min ++ ":" ++ st sec
+
+
+viewLink : String -> Html Msg
+viewLink path =
+    li [] [ a [ href path ] [ text path ] ]
 
 
 localTime : Time.Zone -> Time.Posix -> ( Int, Int, Int )
