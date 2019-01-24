@@ -1,6 +1,7 @@
 port module Main exposing (Msg(..), getGithubForks, init, main, subscriptions, update, view, viewGif)
 
 import Browser
+import Browser.Navigation as Nav
 import Html exposing (..)
 import Html.Attributes exposing (..)
 import Html.Events exposing (..)
@@ -10,6 +11,7 @@ import Json.Encode as E
 import String
 import Task
 import Time
+import Url
 
 
 
@@ -17,16 +19,24 @@ import Time
 
 
 main =
-    Browser.element
+    Browser.application
         { init = init
         , update = update
         , subscriptions = subscriptions
         , view = view
+        , onUrlChange = UrlChanged
+        , onUrlRequest = LinkClicked
         }
 
 
 
 -- MODEL
+
+
+type alias Document msg =
+    { title : String
+    , body : List (Html msg)
+    }
 
 
 type alias ForkEntry =
@@ -41,25 +51,32 @@ type ListModel
     | Success (List ForkEntry)
 
 
-type alias Model =
-    { mainRepo : String
-    , forks : ListModel
-    , time : Time.Posix
+type alias TimeStuff =
+    { time : Time.Posix
     , zone : Time.Zone
     , zoneName : Maybe Time.ZoneName
     }
 
 
-init : Int -> ( Model, Cmd Msg )
-init currentTime =
+type alias Model =
+    { mainRepo : String
+    , forks : ListModel
+    , timeStuff : TimeStuff
+    }
+
+
+init : Int -> Url.Url -> Nav.Key -> ( Model, Cmd Msg )
+init currentTime currentUrl navKey =
     let
         ( model, msgExampleJson ) =
             update (InitData (D.decodeString forkDecoder exampleJSON))
                 { forks = Loading
                 , mainRepo = "elm/core"
-                , time = Time.millisToPosix currentTime
-                , zone = Time.utc
-                , zoneName = Nothing
+                , timeStuff =
+                    { time = Time.millisToPosix currentTime
+                    , zone = Time.utc
+                    , zoneName = Nothing
+                    }
                 }
 
         adjustTime =
@@ -106,10 +123,19 @@ type Msg
     | AdjustTimeZone Time.Zone
     | FindZoneName Time.ZoneName
     | Tick Time.Posix
+    | UrlChanged Url.Url
+    | LinkClicked Browser.UrlRequest
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
+    let
+        { timeStuff } =
+            model
+
+        { zone, time, zoneName } =
+            timeStuff
+    in
     case msg of
         ChangeRepo url ->
             ( { model | mainRepo = url }, testPort (E.string url) )
@@ -134,34 +160,44 @@ update msg model =
                     ( { model | forks = Failure }, Cmd.none )
 
         AdjustTimeZone newZone ->
-            ( { model | zone = newZone }, Cmd.none )
+            ( { model | timeStuff = { timeStuff | zone = newZone } }, Cmd.none )
 
-        FindZoneName zoneName ->
-            ( { model | zoneName = Just zoneName }, Cmd.none )
+        FindZoneName newZoneName ->
+            ( { model | timeStuff = { timeStuff | zoneName = Just newZoneName } }, Cmd.none )
 
         Tick newTime ->
-            ( { model | time = newTime }, Cmd.none )
+            ( { model | timeStuff = { timeStuff | time = newTime } }, Cmd.none )
+
+        UrlChanged url ->
+            ( model, Cmd.none )
+
+        LinkClicked urlRequest ->
+            ( model, Cmd.none )
 
 
 
 -- VIEW
 
 
-view : Model -> Html Msg
+view : Model -> Document Msg
 view model =
-    div []
-        [ h2 [] [ text "Github forks" ]
-        , h3 [] [ text (viewZoneName model.zoneName) ]
-        , h3 [] [ text (viewTime model) ]
-        , viewGif model
+    { title = model.mainRepo
+    , body =
+        [ div []
+            [ h2 [] [ text "Github forks" ]
+            , h3 [] [ text (viewZoneName model.timeStuff.zoneName) ]
+            , h3 [] [ text (viewTime model) ]
+            , viewGif model
+            ]
         ]
+    }
 
 
 viewTime : Model -> String
 viewTime model =
     let
         ( hour, min, sec ) =
-            localTime model.zone model.time
+            localTime model.timeStuff.zone model.timeStuff.time
 
         st =
             String.fromInt
